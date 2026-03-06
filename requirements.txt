@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+numpy
+openpyxl
+reportlab
+matplotlib
+pillow
+psycopg2-binary
+python-multipart
