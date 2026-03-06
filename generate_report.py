@@ -1,7 +1,7 @@
-“””
+"""
 PitchingWRX — Game Outing Report Generator v34
 Dark theme, radial movement chart, PitchingWRX brand colors
-“””
+"""
 
 import pandas as pd
 import numpy as np
