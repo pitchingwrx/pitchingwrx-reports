@@ -54,4 +54,24 @@ async def generate_report(file: UploadFile = File(...)):
             data_path   = xlsx_path,
             logo_path   = 'pwrx_logo.png',
             output_path = pdf_path,
-            db_path     = None,   # Postgre​​​​​​​​​​​​​​​​
+            db_path     = None,   # Postgre​​​​​​​​​​​
+      )
+
+        # Stream PDF back to client
+        with open(pdf_path, 'rb') as f:
+            pdf_bytes = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename="{safe_name}_{game_date}_report.pdf"'
+            }
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        if os.path.exists(xlsx_path): os.remove(xlsx_path)
+        if os.path.exists(pdf_path):  os.remove(pdf_path)
