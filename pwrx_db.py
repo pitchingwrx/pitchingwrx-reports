@@ -283,15 +283,31 @@ def ingest_xlsx(path, verbose=True):
         raise ValueError("No valid rows remaining after data validation")
 
     # Derived columns
+    # Value strings, not just column names, differ by provider -- TruMedia's pitchResult uses
+    # 'Strike Swinging'/'Strike Looking'; a real Trackman PitchCall column (which _map_columns
+    # already aliases into pitchResult) uses 'StrikeSwinging'/'StrikeCalled' with no space and
+    # no 'Looking'. Confirmed against a real 321-pitch Trackman export (2026-03-05, D1 game) --
+    # every one of these Trackman values is real, not guessed. Matched OR'd together so
+    # already-working TruMedia files are unaffected.
     df['count_fixed'] = df['count'].apply(_fix_count) if 'count' in df.columns else ''
-    df['is_whiff']    = (df['pitchResult'].isin(['Strike Swinging', 'Strikeout (Swinging)'])
+    TRACKMAN_SWING_CALLS = ['StrikeSwinging', 'FoulBall', 'FoulBallNotFieldable', 'FoulBallFieldable', 'InPlay']
+    df['is_whiff']    = (df['pitchResult'].isin(['Strike Swinging', 'Strikeout (Swinging)', 'StrikeSwinging'])
                          .astype(int)) if 'pitchResult' in df.columns else 0
-    df['is_called_strike'] = ((df['pitchResult'] == 'Strike Looking')
+    df['is_called_strike'] = (df['pitchResult'].isin(['Strike Looking', 'StrikeCalled'])
                                .astype(int)) if 'pitchResult' in df.columns else 0
-    df['is_swing']    = (df['pitchOutcome'].isin(['S', 'B'])
-                         .astype(int)) if 'pitchOutcome' in df.columns else 0
-    df['is_strike']   = (df['pitchOutcome'].isin(['S', 'SL'])
-                         .astype(int)) if 'pitchOutcome' in df.columns else 0
+    # is_swing/is_strike were always driven by TruMedia's own coded pitchOutcome column (S/B/SL),
+    # a *different* column from pitchResult -- untouched here when it's present. A real Trackman
+    # file has no pitchOutcome equivalent at all (confirmed against the sample export), so it
+    # falls through to the pitchResult/PitchCall-based derivation instead, only in that case.
+    if 'pitchOutcome' in df.columns:
+        df['is_swing']  = df['pitchOutcome'].isin(['S', 'B']).astype(int)
+        df['is_strike'] = df['pitchOutcome'].isin(['S', 'SL']).astype(int)
+    elif 'pitchResult' in df.columns:
+        df['is_swing']  = df['pitchResult'].isin(TRACKMAN_SWING_CALLS).astype(int)
+        df['is_strike'] = df['pitchResult'].isin(['StrikeCalled']+TRACKMAN_SWING_CALLS).astype(int)
+    else:
+        df['is_swing']  = 0
+        df['is_strike'] = 0
 
     # Coordinate flip for catcher's view
     df['px'] = -pd.to_numeric(df['x'], errors='coerce') if 'x' in df.columns else np.nan

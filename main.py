@@ -1,9 +1,20 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import tempfile, os, io, traceback
 import pandas as pd
 
 app = FastAPI()
+
+# Lets pitchingwrx.html's Report Generator quick actions call /ingest, /games, and /generate
+# directly from the browser -- without this, those fetch() calls are blocked by CORS before
+# they ever reach this service.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://pitchingwrxapp-production.up.railway.app"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health():
