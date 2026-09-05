@@ -25,7 +25,13 @@ async def ingest(file: UploadFile = File(...)):
     tmp_path = None
     try:
         contents = await file.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        # Preserve the real uploaded extension -- hardcoding .xlsx here meant a genuine CSV
+        # upload always failed downstream (pd.read_excel can't parse CSV bytes at all: "Excel
+        # file format cannot be determined"), forcing anyone uploading a CSV export to first
+        # resave it as .xlsx in Excel -- which is exactly the action that silently corrupts
+        # the count column (see pwrx_db.py's _fix_count()).
+        suffix = os.path.splitext(file.filename or '')[1] or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(contents)
             tmp_path = tmp.name
 
@@ -125,10 +131,16 @@ def player_games(player: str):
 async def list_games(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        # Preserve the real uploaded extension -- hardcoding .xlsx here meant a genuine CSV
+        # upload always failed downstream (pd.read_excel can't parse CSV bytes at all: "Excel
+        # file format cannot be determined"), forcing anyone uploading a CSV export to first
+        # resave it as .xlsx in Excel -- which is exactly the action that silently corrupts
+        # the count column (see pwrx_db.py's _fix_count()).
+        suffix = os.path.splitext(file.filename or '')[1] or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(contents)
             tmp_path = tmp.name
-        df = pd.read_excel(tmp_path)
+        df = pd.read_csv(tmp_path) if suffix == '.csv' else pd.read_excel(tmp_path)
         os.unlink(tmp_path)
 
         if 'gameDate' not in df.columns:
@@ -168,7 +180,13 @@ async def generate(
     tmp_pdf = None
     try:
         contents = await file.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        # Preserve the real uploaded extension -- hardcoding .xlsx here meant a genuine CSV
+        # upload always failed downstream (pd.read_excel can't parse CSV bytes at all: "Excel
+        # file format cannot be determined"), forcing anyone uploading a CSV export to first
+        # resave it as .xlsx in Excel -- which is exactly the action that silently corrupts
+        # the count column (see pwrx_db.py's _fix_count()).
+        suffix = os.path.splitext(file.filename or '')[1] or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(contents)
             tmp_xlsx = tmp.name
 

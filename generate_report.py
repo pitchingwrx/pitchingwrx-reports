@@ -418,14 +418,19 @@ def build_game_line_table(outing, season, pitcher_name, game_date_str, opponent,
 
 #  Data loading 
 def fix_count(val):
+    # See pwrx_db.py's _fix_count() for the full explanation -- empirically verified against
+    # a real paired CSV/XLSX export (L. Lockhart vs Kimbrel, 2026-09), zero mismatches across
+    # all 9 possible B-S combinations with B>=1. This copy must stay in sync with that one.
     if isinstance(val, str) and '-' in val and len(val) <= 3: return val
     if isinstance(val, datetime.datetime):
-        balls = min(val.month-1, 3); strikes = min(val.day-1, 2)
+        balls = val.month
+        strikes = 0 if val.year == 2000 else val.day
         return f"{balls}-{strikes}"
     return str(val)
 
 def load_data(path):
-    df = pd.read_excel(path)
+    ext = os.path.splitext(path)[1].lower()
+    df = pd.read_csv(path) if ext == '.csv' else pd.read_excel(path)
     return _prepare_df(df)
 
 def _prepare_df(df):

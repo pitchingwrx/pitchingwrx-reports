@@ -148,11 +148,25 @@ def _normalize_name(name):
     return str(name).strip().title()
 
 def _fix_count(val):
+    """
+    Repairs a count cell Excel silently auto-converted to a date. A "B-S" string with B>=1
+    gets misread by Excel as a date, but which date depends on S: when S==0, Excel treats it
+    as a Month-Year pair (e.g. "1-0" -> Jan 2000, since a bare "0" reads as a 2-digit year);
+    otherwise it treats it as Month-Day of the current year (e.g. "1-2" -> Jan 2 of this
+    year). Empirically verified against a real paired CSV/XLSX export of the same 80 pitches
+    (L. Lockhart vs Kimbrel, 2026-09) -- every one of the 9 possible B-S combinations with
+    B>=1 reproduced exactly via `balls=month, strikes=(0 if year==2000 else day)`, with zero
+    exceptions. The previous formula (`min(month-1,3)`/`min(day-1,2)`) was simply wrong --
+    it silently misattributed real counts (e.g. a real "1-2" was written back as "0-1"),
+    which is why counts like 1-2/2-2/3-1/3-2 were vanishing entirely from ingested data.
+    B==0 ("0-0","0-1","0-2") never triggers Excel's date parser at all (month can't be 0),
+    so those always survive as plain text and hit the first branch below, unchanged.
+    """
     if isinstance(val, str) and '-' in val and len(val) <= 3:
         return val
     if isinstance(val, datetime.datetime):
-        balls   = min(val.month - 1, 3)
-        strikes = min(val.day   - 1, 2)
+        balls = val.month
+        strikes = 0 if val.year == 2000 else val.day
         return f"{balls}-{strikes}"
     return str(val) if pd.notna(val) else ''
 
@@ -247,9 +261,24 @@ def _validate_data(df, warnings):
 
 # ── Main ingest ────────────────────────────────────────────────────────────────
 
+def _read_pitch_file(path):
+    """
+    Reads a CSV or Excel pitch-export file by its real extension. A .csv routed through
+    pd.read_excel() fails outright (`Excel file format cannot be determined`) -- confirmed
+    against a real CSV export -- which is why CSV uploads have never worked; this also
+    matters for _fix_count(), since a genuine CSV's count column is always plain text (no
+    Excel cell-typing exists for a CSV), so it should never need date-repair at all, while
+    an XLSX file's count column can be silently corrupted by Excel the moment someone opens
+    and re-saves it (see _fix_count's own docstring).
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext == '.csv':
+        return pd.read_csv(path)
+    return pd.read_excel(path)
+
 def ingest_xlsx(path, verbose=True):
     """
-    Load an XLSX game file and insert new pitches into the database.
+    Load a CSV or XLSX game file and insert new pitches into the database.
     Returns dict with inserted, skipped, flagged, warnings, summary.
     """
     init_db()
@@ -257,9 +286,9 @@ def ingest_xlsx(path, verbose=True):
 
     # Read file
     try:
-        df = pd.read_excel(path)
+        df = _read_pitch_file(path)
     except Exception as e:
-        raise ValueError(f"Could not read XLSX file: {e}")
+        raise ValueError(f"Could not read pitch file: {e}")
 
     if df.empty:
         raise ValueError("File is empty")
