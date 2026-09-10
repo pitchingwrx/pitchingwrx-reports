@@ -1,0 +1,23 @@
+{
+  "shape_features": [
+    "release_speed",
+    "release_spin_rate",
+    "pfx_x",
+    "pfx_z",
+    "release_extension",
+    "release_pos_x",
+    "release_pos_z",
+    "vaa",
+    "haa",
+    "velo_diff_vs_fb",
+    "pfx_x_diff_vs_fb",
+    "pfx_z_diff_vs_fb",
+    "release_point_diff_vs_fb",
+    "extension_diff_vs_fb"
+  ],
+  "context_features": [
+    "balls",
+    "strikes",
+    "same_handed"
+  ]
+}

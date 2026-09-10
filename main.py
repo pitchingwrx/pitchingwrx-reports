@@ -225,6 +225,55 @@ async def generate(
             os.unlink(tmp_pdf)
 
 
+@app.get("/stuff_plus/score")
+def stuff_plus_score_internal(pitcher_name: str, pitcher_throws: str):
+    """Scores a pitcher already in the `pitches` table (populated via the
+    existing /ingest flow) against the internally-trained MLB Stuff+ model.
+    Only ever returns the resulting score, never anything about the model
+    itself -- see the plan's licensing section for why that boundary matters."""
+    try:
+        from stuff_plus.score import score_internal_pitcher
+        summary = score_internal_pitcher(pitcher_name, pitcher_throws)
+        if not summary:
+            return JSONResponse({"error": f"No pitches found for {pitcher_name}"}, status_code=404)
+        return {"pitcher_name": pitcher_name, "pitch_types": summary}
+    except FileNotFoundError:
+        return JSONResponse({"error": "Model not trained/deployed yet -- see stuff_plus/train.py"}, status_code=503)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/stuff_plus/score_upload")
+async def stuff_plus_score_upload(file: UploadFile = File(...), pitcher_throws: str = Form(...)):
+    """Scores a directly-uploaded pitch file (TruMedia canonical column shape)
+    against the model -- the path a future "bring your own pitcher data"
+    licensed feature would call. The model itself never leaves this service;
+    only the score does."""
+    tmp_path = None
+    try:
+        contents = await file.read()
+        suffix = os.path.splitext(file.filename or '')[1] or '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+        df_raw = pd.read_csv(tmp_path) if suffix == '.csv' else pd.read_excel(tmp_path)
+
+        from stuff_plus.score import score_uploaded_pitches
+        summary = score_uploaded_pitches(df_raw, pitcher_throws)
+        if not summary:
+            return JSONResponse({"error": "No scoreable pitches found in the uploaded file"}, status_code=400)
+        return {"pitch_types": summary}
+    except FileNotFoundError:
+        return JSONResponse({"error": "Model not trained/deployed yet -- see stuff_plus/train.py"}, status_code=503)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
 @app.post("/generate_from_db")
 async def generate_from_db(
     player_name: str = Form(...),

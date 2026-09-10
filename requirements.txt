@@ -8,3 +8,7 @@ matplotlib
 pillow
 psycopg2-binary
 python-multipart
+xgboost
+scikit-learn
+scipy
+joblib
