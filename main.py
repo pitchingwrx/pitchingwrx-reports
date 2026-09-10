@@ -326,9 +326,14 @@ def stuff_plus_debug(pitcher_name: str):
         conn.close()
         if df.empty:
             return JSONResponse({"error": "no rows"}, status_code=404)
-        raw = df.to_dict('records')
-        mapped = map_trumedia_columns(df, 'R').to_dict('records')
-        return {"raw": raw, "mapped": mapped}
+        import json as _json
+        # df.to_json handles NaN/date/numpy dtypes safely -- manually returning
+        # .to_dict('records') through FastAPI's own encoder is what triggered the
+        # 500 here (likely a NaN or numpy scalar type it choked on).
+        raw = _json.loads(df.to_json(orient='records', date_format='iso'))
+        mapped_df = map_trumedia_columns(df, 'R')
+        mapped = _json.loads(mapped_df.to_json(orient='records', date_format='iso'))
+        return JSONResponse({"raw": raw, "mapped": mapped})
     except Exception as e:
         traceback.print_exc()
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": str(e), "type": type(e).__name__}, status_code=500)
