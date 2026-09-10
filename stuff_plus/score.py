@@ -104,9 +104,15 @@ def map_trumedia_columns(df, pitcher_throws):
     # Statcast's pfx_x/pfx_z (what the model was trained on) are in feet.
     out['pfx_z'] = col('ivb', 'IndVertBrk') / 12.0
     out['pfx_x'] = col('hb', 'HorzBrk') / 12.0
+    # Verified against real production data: `extension` is already in feet
+    # (6.68 is a real, plausible extension value), but `rel_x`/`rel_z` are in
+    # inches (a raw rel_z of 71.0 only makes sense as 71 inches = 5.9ft, a
+    # normal release height -- as feet it would be absurd). Confirmed via a
+    # temporary /stuff_plus/debug endpoint against a real athlete's real rows;
+    # do not assume all TruMedia measurements share one unit convention.
     out['release_extension'] = col('extension', 'Extension')
-    out['release_pos_x'] = col('rel_x', 'RelX')
-    out['release_pos_z'] = col('rel_z', 'RelZ')
+    out['release_pos_x'] = col('rel_x', 'RelX') / 12.0
+    out['release_pos_z'] = col('rel_z', 'RelZ') / 12.0
     out['vaa'] = col('vert_appr_angle', 'VertApprAngle')
     out['haa'] = col('horz_appr_angle', 'HorzApprAngle')
     out['pitch_type'] = col('pitch_type', 'pitchType')
