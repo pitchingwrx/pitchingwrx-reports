@@ -311,29 +311,3 @@ async def generate_from_db(
     finally:
         if tmp_pdf and os.path.exists(tmp_pdf):
             os.unlink(tmp_pdf)
-
-
-@app.get("/stuff_plus/debug")
-def stuff_plus_debug(pitcher_name: str):
-    """Temporary diagnostic endpoint -- returns raw DB rows + the mapped feature
-    values for a few pitches, so real column units/ranges can be checked against
-    what the model expects. Remove once the TruMedia column mapping is verified."""
-    try:
-        from pwrx_db import get_conn
-        from stuff_plus.score import map_trumedia_columns
-        conn = get_conn()
-        df = pd.read_sql("SELECT * FROM pitches WHERE pitcher_name = %s LIMIT 5", conn, params=[pitcher_name])
-        conn.close()
-        if df.empty:
-            return JSONResponse({"error": "no rows"}, status_code=404)
-        import json as _json
-        # df.to_json handles NaN/date/numpy dtypes safely -- manually returning
-        # .to_dict('records') through FastAPI's own encoder is what triggered the
-        # 500 here (likely a NaN or numpy scalar type it choked on).
-        raw = _json.loads(df.to_json(orient='records', date_format='iso'))
-        mapped_df = map_trumedia_columns(df, 'R')
-        mapped = _json.loads(mapped_df.to_json(orient='records', date_format='iso'))
-        return JSONResponse({"raw": raw, "mapped": mapped})
-    except Exception as e:
-        traceback.print_exc()
-        return JSONResponse({"error": str(e), "type": type(e).__name__}, status_code=500)
