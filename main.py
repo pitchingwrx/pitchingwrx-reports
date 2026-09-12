@@ -311,3 +311,28 @@ async def generate_from_db(
     finally:
         if tmp_pdf and os.path.exists(tmp_pdf):
             os.unlink(tmp_pdf)
+
+
+@app.post("/nutrition/scan_label")
+async def nutrition_scan_label(file: UploadFile = File(...)):
+    """Reads a photographed Nutrition Facts label and returns structured macro data for
+    the app's food-logging flow. Same IP/data boundary as /stuff_plus/score_upload -- the
+    request only ever carries a photo the athlete took themselves, and the response is
+    only ever the extracted numbers, never the model or the raw image."""
+    try:
+        contents = await file.read()
+        from nutrition_scan import read_nutrition_label
+        result = read_nutrition_label(contents)
+        if not result:
+            return JSONResponse(
+                {"error": "Could not find a legible nutrition label in that photo. Try again with better lighting/focus, or enter it manually."},
+                status_code=422
+            )
+        return result
+    except KeyError:
+        # ANTHROPIC_API_KEY missing from this service's environment -- a config problem,
+        # not a bad photo, so it gets its own status code rather than looking like a 500.
+        return JSONResponse({"error": "Label scanning isn't configured on this service yet."}, status_code=503)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
