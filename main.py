@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 import tempfile, os, io, traceback
 import pandas as pd
 
@@ -122,6 +122,81 @@ def player_games(player: str):
             label += f" - {int(row['pitches'])} pitches"
             games.append({"date": date_str, "label": label})
         return {"games": games}
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/pitches/games")
+def pitches_games(pitcher_id: int = None, pitcher_name: str = None):
+    """Distinct game list for one pitcher, by MLB Stats API id (rostered pro athletes) or
+    by name (Trackman-uploaded amateur/remote athletes, who have no mlbPlayerId).
+    Replaces pitchingwrx.html's direct sbReports.from('pitches') reads (fetchPitcherGames/
+    fetchPitcherGamesByName) -- that Supabase project's anon key was hardcoded in the public
+    HTML, so this connects via the trusted DATABASE_URL instead, same as /roster above."""
+    if not pitcher_id and not pitcher_name:
+        return JSONResponse({"error": "pitcher_id or pitcher_name required"}, status_code=400)
+    try:
+        from pwrx_db import get_conn
+        conn = get_conn()
+        if pitcher_id:
+            df = pd.read_sql(
+                "SELECT DISTINCT ON (game_date) game_date, opponent, team, level FROM pitches "
+                "WHERE pitcher_id = %s ORDER BY game_date DESC, id ASC",
+                conn, params=[pitcher_id]
+            )
+        else:
+            df = pd.read_sql(
+                "SELECT DISTINCT ON (game_date) game_date, opponent, team, level FROM pitches "
+                "WHERE pitcher_name = %s ORDER BY game_date DESC, id ASC",
+                conn, params=[pitcher_name]
+            )
+        conn.close()
+        df['game_date'] = df['game_date'].astype(str)
+        return {"games": df.to_dict(orient='records')}
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/pitches/season")
+def pitches_season(pitcher_id: int = None, pitcher_name: str = None, through_date: str = None, from_date: str = None):
+    """Full per-pitch rows for a date range -- feeds the client's existing
+    aggregateArsenal()/buildArsenalRows() report-building math unchanged. Replaces
+    fetchPitcherSeasonPitches/fetchPitcherSeasonPitchesByName's direct Supabase reads.
+    Nullable INTEGER columns come back from psycopg2/pandas as float64+NaN the moment any
+    row in the result has a NULL there (e.g. is_whiff is only set on swings) -- cast back to
+    pandas' nullable Int64 so they serialize as real ints/null instead of "5.0". Serialized via
+    pandas' own to_json (not Starlette's JSONResponse/stdlib json), which correctly turns NaN
+    into JSON null instead of the invalid bare `NaN` token stdlib json would otherwise emit --
+    that would have broken every report touching a pitch with any missing numeric field."""
+    if not pitcher_id and not pitcher_name:
+        return JSONResponse({"error": "pitcher_id or pitcher_name required"}, status_code=400)
+    if not through_date:
+        return JSONResponse({"error": "through_date required"}, status_code=400)
+    try:
+        from pwrx_db import get_conn
+        conn = get_conn()
+        clauses, params = [], []
+        if pitcher_id:
+            clauses.append("pitcher_id = %s"); params.append(pitcher_id)
+        else:
+            clauses.append("pitcher_name = %s"); params.append(pitcher_name)
+        clauses.append("game_date <= %s"); params.append(through_date)
+        if from_date:
+            clauses.append("game_date >= %s"); params.append(from_date)
+        df = pd.read_sql(
+            f"SELECT * FROM pitches WHERE {' AND '.join(clauses)} ORDER BY id ASC",
+            conn, params=params
+        )
+        conn.close()
+        df['game_date'] = df['game_date'].astype(str)
+        int_cols = ['id','pitcher_id','pitch_num','outs','is_swing','is_whiff','is_called_strike','is_strike']
+        for col in int_cols:
+            if col in df.columns:
+                df[col] = df[col].astype('Int64')
+        body = df.to_json(orient='records')
+        return Response(content=f'{{"pitches":{body}}}', media_type='application/json')
     except Exception as e:
         traceback.print_exc()
         return JSONResponse({"error": str(e)}, status_code=500)
