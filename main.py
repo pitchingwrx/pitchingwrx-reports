@@ -405,11 +405,31 @@ async def nutrition_scan(file: UploadFile = File(...)):
     only ever the extracted/estimated numbers, never the model or the raw image."""
     try:
         contents = await file.read()
+        # Temporary diagnostics (2026-09-29) -- a real, reproducible live-app failure that
+        # every direct re-upload of the same photo (via curl) fails to reproduce, which points
+        # at something genuinely different between what the phone's live capture sends and
+        # what a saved/re-shared copy of that photo contains. Logs to Railway's own server
+        # logs (print goes to stdout, which Railway captures) so the next real failure can be
+        # diagnosed from actual data instead of another guess. Remove once this is resolved.
+        try:
+            from PIL import Image
+            import io as _io
+            _probe = Image.open(_io.BytesIO(contents))
+            _dims = f"{_probe.size[0]}x{_probe.size[1]}"
+            _fmt = _probe.format
+        except Exception as _probe_err:
+            _dims = "unopenable"
+            _fmt = str(_probe_err)[:80]
+        print(f"[nutrition_scan diag] upload_content_type={file.content_type} filename={file.filename} bytes={len(contents)} pil_format={_fmt} pil_dims={_dims}")
         from nutrition_scan import scan_nutrition_photo
         result = scan_nutrition_photo(contents)
         if not result:
+            # _diag appended directly into the visible error text (temporary, see note above)
+            # so a screenshot of the actual failure on Alex's phone is enough to diagnose it --
+            # no server log access needed.
+            _diag = f" [diag: ct={file.content_type} bytes={len(contents)} fmt={_fmt} dims={_dims}]"
             return JSONResponse(
-                {"error": "Could not identify a nutrition label or food in that photo. If scanning a label, try getting closer so it fills more of the frame -- otherwise enter it manually."},
+                {"error": "Could not identify a nutrition label or food in that photo. If scanning a label, try getting closer so it fills more of the frame -- otherwise enter it manually." + _diag},
                 status_code=422
             )
         return result
