@@ -402,7 +402,7 @@ async def nutrition_scan(file: UploadFile = File(...)):
         result = scan_nutrition_photo(contents)
         if not result:
             return JSONResponse(
-                {"error": "Could not identify a nutrition label or food in that photo. Try again with better lighting/focus, or enter it manually."},
+                {"error": "Could not identify a nutrition label or food in that photo. If scanning a label, try getting closer so it fills more of the frame -- otherwise enter it manually."},
                 status_code=422
             )
         return result

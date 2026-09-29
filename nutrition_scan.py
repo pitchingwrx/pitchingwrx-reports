@@ -37,10 +37,15 @@ def _get_client():
         _client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     return _client
 
-# Long-edge cap in pixels -- plenty of resolution to read printed label text or judge a plated
-# meal's portions, while keeping per-scan vision cost small and predictable regardless of how
-# large the original phone photo is.
-MAX_DIM = 1024
+# Long-edge cap in pixels. 1024 turned out too aggressive in real use: a label that fills the
+# whole frame reads fine at that size, but a real "container of food" photo (the common case)
+# has the label as only part of the shot -- once downscaled to 1024 total, that label region
+# can shrink to a couple hundred pixels, blurring 8-10pt printed text past legibility even
+# though it reads fine on the phone at full resolution. Claude's own vision pipeline already
+# handles images cleanly up to ~1568px on the long edge before doing any resizing of its own,
+# so capping lower than that was throwing away real resolution for no cost benefit -- anything
+# at or under 1568 costs the same either way. Matches that ceiling instead.
+MAX_DIM = 1568
 
 def prepare_scan_image(raw_bytes):
     img = Image.open(io.BytesIO(raw_bytes))
@@ -50,7 +55,10 @@ def prepare_scan_image(raw_bytes):
         scale = MAX_DIM / max(w, h)
         img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
     buf = io.BytesIO()
-    img.save(buf, format='JPEG', quality=85)
+    # Quality bumped slightly (85->92) alongside the resolution increase -- JPEG artifacting at
+    # 85 was a secondary, smaller contributor to the same problem: fine printed text is exactly
+    # where compression blocking shows up first.
+    img.save(buf, format='JPEG', quality=92)
     return base64.b64encode(buf.getvalue()).decode('utf-8'), 'image/jpeg'
 
 NUTRITION_SCAN_TOOL = {
