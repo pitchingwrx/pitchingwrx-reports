@@ -6,12 +6,19 @@ import pandas as pd
 
 app = FastAPI()
 
-# Lets pitchingwrx.html's Report Generator quick actions call /ingest, /games, and /generate
-# directly from the browser -- without this, those fetch() calls are blocked by CORS before
-# they ever reach this service.
+# Lets pitchingwrx.html's Report Generator quick actions (and the Nutrition scan button) call
+# /ingest, /games, /generate, and /nutrition/scan directly from the browser -- without this,
+# those fetch() calls are blocked by CORS before they ever reach this service. Real bug found
+# 2026-09-29: only the raw Railway URL was listed, so once app.pitchingwrx.com went live as a
+# custom domain for pitchingwrx_app, every one of these calls silently broke for anyone loading
+# the app from that domain -- the browser blocks it before the request is even sent, so curl
+# testing this service directly (curl doesn't enforce CORS at all) shows nothing wrong.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://pitchingwrxapp-production.up.railway.app"],
+    allow_origins=[
+        "https://pitchingwrxapp-production.up.railway.app",
+        "https://app.pitchingwrx.com",
+    ],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
