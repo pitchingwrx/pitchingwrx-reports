@@ -13,3 +13,4 @@ scikit-learn
 scipy
 joblib
 anthropic
+pillow-heif

@@ -35,6 +35,13 @@ import io
 import base64
 from anthropic import Anthropic
 from PIL import Image, ImageOps
+import pillow_heif
+# Plain Pillow can't open HEIC/HEIF at all -- confirmed live: an iPhone's camera-capture file
+# input can hand over a raw .heic file (iOS's native photo format), which plain Image.open()
+# rejects with "cannot identify image file", a real 500 with no useful message to the athlete.
+# This registers HEIC/HEIF as a format Image.open() recognizes, same call as everywhere else
+# in this codebase that reads a phone photo.
+pillow_heif.register_heif_opener()
 
 _client = None
 def _get_client():
