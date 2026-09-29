@@ -142,6 +142,11 @@ def scan_nutrition_photo(raw_bytes):
     resp = client.messages.create(
         model="claude-sonnet-4-5-20250929",
         max_tokens=1024,
+        # This is classification+extraction, not creative writing -- the default temperature
+        # was producing genuinely different photo_type calls (food/product/unclear) across
+        # repeated calls on the identical photo for a borderline case (sealed candy packaging,
+        # no visible food or label). Pinned low so the same photo gets the same answer.
+        temperature=0,
         tools=[NUTRITION_SCAN_TOOL],
         tool_choice={"type": "tool", "name": "record_nutrition_scan"},
         messages=[{
