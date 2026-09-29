@@ -119,7 +119,7 @@ def scan_nutrition_photo(raw_bytes):
     image_b64, media_type = prepare_scan_image(raw_bytes)
     client = _get_client()
     resp = client.messages.create(
-        model="claude-sonnet-5-5",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=1024,
         tools=[NUTRITION_SCAN_TOOL],
         tool_choice={"type": "tool", "name": "record_nutrition_scan"},
