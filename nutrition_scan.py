@@ -28,7 +28,7 @@ import os
 import io
 import base64
 from anthropic import Anthropic
-from PIL import Image
+from PIL import Image, ImageOps
 
 _client = None
 def _get_client():
@@ -49,6 +49,15 @@ MAX_DIM = 1568
 
 def prepare_scan_image(raw_bytes):
     img = Image.open(io.BytesIO(raw_bytes))
+    # Most phone cameras (iPhones especially) save many photos in landscape sensor orientation
+    # plus an EXIF "Orientation" tag telling viewers to rotate it for display -- every photo
+    # app respects that automatically, which is why a photo looks upright on the phone, but
+    # PIL.Image.open() does NOT apply it. Without this, the raw pixels handed to the model can
+    # be sideways or upside-down while looking completely normal to a human -- almost certainly
+    # why a photo Alex confirmed was clearly legible still came back "could not identify."
+    # exif_transpose() bakes the rotation/flip into the actual pixels and drops the now-stale
+    # orientation tag, so every downstream step (resize, resave) works on a right-side-up image.
+    img = ImageOps.exif_transpose(img)
     img = img.convert('RGB')
     w, h = img.size
     if max(w, h) > MAX_DIM:
