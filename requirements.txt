@@ -12,5 +12,5 @@ xgboost
 scikit-learn
 scipy
 joblib
-anthropic
+anthropic==1.9.0
 pillow-heif

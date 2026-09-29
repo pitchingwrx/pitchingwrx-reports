@@ -158,6 +158,15 @@ def scan_nutrition_photo(raw_bytes):
                 {"type": "text", "text": _PROMPT_TEXT},
             ],
         }],
+        # temperature isn't a named param on this SDK version's messages.create() (confirmed by
+        # inspecting the real method signature -- a prior attempt passing it as a bare kwarg
+        # broke every call with a TypeError). extra_body is the SDK's documented escape hatch
+        # for request-body fields it doesn't model directly, and IS accepted here. Classification
+        # was verified to genuinely vary across repeated calls on the identical borderline photo
+        # (sealed candy wrapper) at the default temperature -- pinned to 0 since this is
+        # classify-and-extract, not creative generation, and should give the same photo the
+        # same answer.
+        extra_body={"temperature": 0},
     )
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and block.name == "record_nutrition_scan":
