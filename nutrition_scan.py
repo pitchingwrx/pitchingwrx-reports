@@ -165,13 +165,46 @@ _CONTEXT_ADDENDUM = (
     "a match you're not confident in just because a venue was named."
 )
 
-def scan_nutrition_photo(raw_bytes, context=None):
+# The app's "Scan" button now opens a 3-way chooser (Label / Home-Cooked Meal / Restaurant)
+# instead of a single generic button -- the person tells the app which situation this is up
+# front, rather than the model having to guess purely from the photo with no steer at all.
+# Each hint only narrows expectations; the model still classifies honestly (falls through to
+# whatever case actually fits) if the photo doesn't match what was expected -- these are
+# steers, not overrides, same principle as _CONTEXT_ADDENDUM below.
+_MODE_HINTS = {
+    "label": (
+        "\n\nThe person specifically chose 'Scan Nutritional Label' before taking this photo, "
+        "so they intend to read a printed Nutrition Facts panel. If one is genuinely visible "
+        "and legible, treat this as case (a) and read it exactly. If you genuinely cannot find "
+        "a real, legible label in the photo, do not force a fake read -- classify honestly as "
+        "whichever of (b)/(c)/(d) actually fits, exactly as you would without this hint."
+    ),
+    "home": (
+        "\n\nThe person specifically chose 'Home-Cooked Meal' before taking this photo -- this "
+        "was made at home, not bought at a restaurant. Expect case (c) ('food') as the normal "
+        "outcome. Still use case (b) if you genuinely recognize a specific packaged/branded "
+        "ingredient with no label visible in the shot (e.g. a photographed packaged snack is "
+        "still case (b) even in a 'home-cooked' context)."
+    ),
+    "restaurant": (
+        "\n\nThe person specifically chose 'Restaurant' before taking this photo, confirming "
+        "this food is from a restaurant/venue. Expect case (c) ('food') as the normal outcome "
+        "-- a restaurant plate is not 'product' just because it's from a named place. If a "
+        "venue name is given below, lean toward trying to match a specific real menu item from "
+        "it per those instructions."
+    ),
+}
+
+def scan_nutrition_photo(raw_bytes, context=None, mode=None):
     """Returns a dict of extracted/estimated fields, or None if the photo was 'unclear'.
-    context: optional short venue/brand hint the person typed before scanning (e.g.
-    "Chipotle") -- see _CONTEXT_ADDENDUM for how it's used."""
+    mode: optional 'label'|'home'|'restaurant' -- which chooser option the person picked
+    before scanning, see _MODE_HINTS. context: optional short venue/brand hint (e.g.
+    "Chipotle"), typed when mode='restaurant' -- see _CONTEXT_ADDENDUM for how it's used."""
     image_b64, media_type = prepare_scan_image(raw_bytes)
     client = _get_client()
     prompt_text = _PROMPT_TEXT
+    if mode in _MODE_HINTS:
+        prompt_text += _MODE_HINTS[mode]
     if context:
         # Capped short -- this is meant to be a venue/brand name, not free-form text; also
         # keeps a pathologically long input from bloating the prompt.
