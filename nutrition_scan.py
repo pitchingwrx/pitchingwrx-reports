@@ -142,10 +142,40 @@ _PROMPT_TEXT = (
     "If (d): set photo_type to 'unclear' and leave every other field null."
 )
 
-def scan_nutrition_photo(raw_bytes):
-    """Returns a dict of extracted/estimated fields, or None if the photo was 'unclear'."""
+# Appended to _PROMPT_TEXT only when the person supplied a venue hint (e.g. "Chipotle") when
+# scanning -- purely additive context, the four-way decision above and its own rules are
+# unchanged either way. A named chain restaurant publishes real nutrition per menu item, which
+# is meaningfully more reliable than guessing mass/ingredients from a photo alone -- this is
+# the same "recall over guess" reasoning already used for case (b) above, extended to apply
+# even though a plated restaurant meal still correctly classifies as 'food' (not 'product'),
+# since it's not packaged.
+_CONTEXT_ADDENDUM = (
+    "\n\nThe person taking this photo says it's from: \"{context}\". If this names a specific "
+    "restaurant/chain/brand and, combined with what's actually visible in the photo, you can "
+    "confidently identify a specific real menu item (or a close match) from it, use that "
+    "chain's typical published nutrition for that item instead of a generic visual portion "
+    "guess -- this applies within case (c) ('food'), not just case (b); a restaurant plate is "
+    "never 'product' just because you're given a venue name. When you do this, say so plainly "
+    "in items_desc (e.g. \"Matched to Chipotle's Chicken Bowl (white rice, black beans, "
+    "chicken, cheese, mild salsa) based on typical published nutrition for this item\") and use "
+    "a tighter range (~10-15% either side) reflecting that added confidence, same as case (b)'s "
+    "range. If the named venue doesn't actually help you identify a specific item (unfamiliar "
+    "place, or the visible food doesn't clearly match anything on that chain's menu), ignore "
+    "it and fall back to the normal case (c) visual estimate and its wider range -- never force "
+    "a match you're not confident in just because a venue was named."
+)
+
+def scan_nutrition_photo(raw_bytes, context=None):
+    """Returns a dict of extracted/estimated fields, or None if the photo was 'unclear'.
+    context: optional short venue/brand hint the person typed before scanning (e.g.
+    "Chipotle") -- see _CONTEXT_ADDENDUM for how it's used."""
     image_b64, media_type = prepare_scan_image(raw_bytes)
     client = _get_client()
+    prompt_text = _PROMPT_TEXT
+    if context:
+        # Capped short -- this is meant to be a venue/brand name, not free-form text; also
+        # keeps a pathologically long input from bloating the prompt.
+        prompt_text += _CONTEXT_ADDENDUM.format(context=context.strip()[:100])
     resp = client.messages.create(
         model="claude-sonnet-4-5-20250929",
         max_tokens=1024,
@@ -155,7 +185,7 @@ def scan_nutrition_photo(raw_bytes):
             "role": "user",
             "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
-                {"type": "text", "text": _PROMPT_TEXT},
+                {"type": "text", "text": prompt_text},
             ],
         }],
         # temperature isn't a named param on this SDK version's messages.create() (confirmed by

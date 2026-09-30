@@ -396,17 +396,20 @@ async def generate_from_db(
 
 
 @app.post("/nutrition/scan")
-async def nutrition_scan(file: UploadFile = File(...)):
+async def nutrition_scan(file: UploadFile = File(...), context: str = Form(None)):
     """One endpoint for the app's single 'Scan' button -- handles both a printed Nutrition
     Facts label (exact read) and a plain photo of food with no label (rough estimate); the
     model itself decides which it's looking at. See nutrition_scan.py for the accuracy
-    tradeoffs of the food-estimate case. Same IP/data boundary as /stuff_plus/score_upload --
-    the request only ever carries a photo the athlete took themselves, and the response is
-    only ever the extracted/estimated numbers, never the model or the raw image."""
+    tradeoffs of the food-estimate case. context is an optional venue/brand hint the person
+    typed before scanning (e.g. "Chipotle") -- lets a restaurant meal use that chain's real
+    published nutrition instead of a pure visual guess; see nutrition_scan.py's
+    _CONTEXT_ADDENDUM. Same IP/data boundary as /stuff_plus/score_upload -- the request only
+    ever carries a photo the athlete took themselves, and the response is only ever the
+    extracted/estimated numbers, never the model or the raw image."""
     try:
         contents = await file.read()
         from nutrition_scan import scan_nutrition_photo
-        result = scan_nutrition_photo(contents)
+        result = scan_nutrition_photo(contents, context=context)
         if not result:
             return JSONResponse(
                 {"error": "Could not identify a nutrition label or food in that photo. If scanning a label, try getting closer so it fills more of the frame -- otherwise enter it manually."},
